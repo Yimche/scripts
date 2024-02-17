@@ -25,7 +25,9 @@ and needs charging or too high and needs to be unplugged
 
 ## adb-monitor.sh
 A script I wrote to quickly enable / disable using an android tablet as a
-secondary monitor. Works on X11 and Wayland
+secondary monitor. Works on X11 and Wayland.
+
+When using the script you need to run execute it with parameters "boot" or "kill"
 
 ## launch.sh
 Custom launch scripts for files of different mime-types
