@@ -4,12 +4,15 @@
 # Version	:	1.0
 # License	:	n/a
 # Date		:	2010 04/15
-# Requires	:	foobar2000, foo_np_simple, notify-send
+# Requires	:	foobar2000, foo_np_simple, notify-send, incron
 # Script Name :	fb2000_notify.sh
 # Description :	Script to display Now Playing' info via 'foo_np_simple'
 #				component and 'notify-send'.
 #
-# Notes	  :  n/a
+# Notes	  :
+# Incron rule
+# /home/julian/foobar2000/now_playing/np.txt	IN_CLOSE_WRITE
+# /bin/bash /home/julian/code_Master/scripts/fb2k-notif.sh
 #
 # Acknowledge :  thanks to original authors
 # Resources  :  n/a
@@ -77,11 +80,14 @@ function f_get_npinfo {
   msg_line_summary=0
   let msg_lines_body=${#line_array[@]}-7
   let msg_line_dir=${#line_array[@]}-1
+  let msg_line_status=${#line_array[@]}-3
 
   msg_summary=$(echo -e "${line_array[$msg_line_summary]}")
   msg_body=$(echo -e "${line_array[@]:2:$msg_lines_body}")
+  msg_status=$(echo -e "${line_array[$msg_line_status]}")
   track_path=$(echo -n "${line_array[$msg_line_dir]}")
 
+  echo -e "${line_array[@]:2:$msg_lines_body}"
 }
 
 function f_fix_notify_bug {
@@ -93,7 +99,7 @@ function f_fix_notify_bug {
   # Remove '&'s from message body and replace with user-specified
   # alternative.
   msg_body=$(echo "$msg_body" | sed "s/&/${AMPALT}/g")
-
+  msg_body=$(echo "$msg_body" | awk '{$1=$1;print}')
 }
 
 function f_get_image {
@@ -110,13 +116,13 @@ function f_get_image {
     if [ -f "$item" ]; then
       mime=$(file -ib "$item")
       result=$(echo $mime | grep 'image')
-      if [ $result ]; then
-        echo $item
+      if [ $result ]; then # This block actually never get's hit, becuase once if fails the first check it goes straight to extracting the file.
+        echo "result: $result"
         imgfile="$item"
         break
       else
         track_path=$(echo $track_path | sed -e 's/[a-zA-Z]://' -e 's/\\n//g' -e 's/\\/\//g' | sed -E 's/(.*)/\/home\/julian\1/g')
-        $(ffmpeg -y -i "$track_path" -map 0:artwork? -c copy "/tmp/artwork.jpeg" >/dev/null 2>&1)
+        $(ffmpeg -y -i "$track_path" -an -c copy "/tmp/artwork.jpeg" >/dev/null 2>&1)
         imgfile="/tmp/artwork.jpeg"
         break
       fi
@@ -138,10 +144,11 @@ function f_convert_image {
       -depth 24 \
       -background transparent \
       -quality 100 \
-      -filter Lanczos \
-      -unsharp 0x1.5+1+0 \
+      \
       -resize ${THUMB_SIZE} \
-      "$imgfile_resized" #-thumbnail x${THUMB_SIZE} \
+      "$imgfile_resized" #-filter Lanczos \
+    #-unsharp 0x1.5+1+0 \
+    #-thumbnail x${THUMB_SIZE} \
     #-bordercolor '#000000' \
     #-border 2x2 \
 
@@ -161,8 +168,8 @@ function f_notify {
   # Create the 'notify-send' pop-up.
 
   # Set some vars
-  notifuname="$NOTIFUNAME"
-  namecheck=$(who | grep -E "\b${notifuname}\b")
+  #notifuname="$NOTIFUNAME"
+  #namecheck=$(who | grep -E "\b${notifuname}\b")
   #notificon="user-info"
   notificon="$imgfile_resized"
 
@@ -195,12 +202,22 @@ function f_notify {
 
   #    if [ -n "$is_scrblank" ] || [ !"$is_err" ]; then
   # Send desktop notification
-  notify-send \
-    --icon="$notificon" \
-    --expire-time=6000 \
-    --urgency=normal \
-    -r 3662 \
-    "${msg_summary}" "${msg_body}"
+
+  # Remove replacement in KDE Plasma
+  replaceID="-r 3662"
+  if [[ ! $(pgrep plasmashell) =~ "" ]]; then
+    replaceID=""
+  fi
+
+  if [ $msg_status == "Playing" ]; then
+    notify-send \
+      --icon="$notificon" \
+      --expire-time=6000 \
+      --urgency=normal \
+      --app-name="Foobar2000" \
+      $replaceID \
+      "${msg_summary}" "${msg_body}"
+  fi
   #   fi
   #   fi
   # fi
@@ -212,7 +229,6 @@ function f_notify {
 
 # -- Main ---------------------------------------------------------------------
 # Call functions and assign values to additional variables.
-
 f_get_npinfo
 f_fix_notify_bug
 f_get_image
